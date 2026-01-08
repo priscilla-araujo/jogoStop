@@ -5,6 +5,7 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
@@ -21,6 +22,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
@@ -68,17 +70,32 @@ private object Routes {
 /* ----------------------------- MODELOS / LÓGICA ----------------------------- */
 
 private val LettersPT = listOf(
-    "A","B","C","D","E","F","G","H","I","J","L","M","N","O","P","Q","R","S","T","U","V","X","Z","Ç"
+    "A","B","C","D","E","F","G","H","I","J","L","M","N","O","P","Q","R","S","T","U","V","X","Z"
 )
 
 data class Player(val name: String, val eliminated: Boolean = false)
+
+data class WordEntry(
+    val playerName: String,
+    val letter: String,
+    val word: String
+)
 
 data class GameState(
     val category: String = "Animais",
     val players: List<Player> = emptyList(),
     val currentIndex: Int = 0,
     val currentLetter: String? = null,
+
+    // palavras repetidas / validação
     val usedWords: Set<String> = emptySet(),
+
+    // ✅ histórico de palavras aceitas (fica até acabar o jogo)
+    val acceptedWords: List<WordEntry> = emptyList(),
+
+    // ✅ letras já sorteadas (pra NÃO repetir)
+    val usedLetters: Set<String> = emptySet(),
+
     val lastWord: String? = null,
     val isOver: Boolean = false,
     val winnerName: String? = null,
@@ -170,7 +187,10 @@ fun AppNav(navController: NavHostController) {
         }
 
         composable(Routes.Instructions) {
-            InstructionsScreen(onBack = { navController.popBackStack() })
+            InstructionsScreen(
+                onBack = { navController.popBackStack() },
+                onStartGame = { navController.navigate(Routes.Setup) }
+            )
         }
 
         composable(Routes.Setup) {
@@ -295,19 +315,33 @@ fun LoginScreen(
                     .fillMaxSize()
                     .padding(horizontal = 28.dp, vertical = 12.dp)
                     .verticalScroll(rememberScrollState())
-                    .imePadding()
+                    .imePadding(),
+                horizontalAlignment = Alignment.CenterHorizontally
             ) {
-                Spacer(Modifier.height(8.dp))
 
+                // ✅ LOGO CENTRALIZADO (logo.png -> R.drawable.logo)
+                Spacer(Modifier.height(10.dp))
+                Image(
+                    painter = painterResource(id = R.drawable.logo),
+                    contentDescription = "Logo JogoStop",
+                    modifier = Modifier
+                        .size(200.dp)
+                        .clip(RoundedCornerShape(24.dp))
+                )
+                Spacer(Modifier.height(10.dp))
+
+                // ✅ “Bem-vindo” vem DEPOIS do logo
                 Text(
-                    text = "🎉 Bem-vindo(a)!",
+                    text = "Bem-vindo(a)!",
                     color = Color.White,
                     style = MaterialTheme.typography.headlineMedium,
-                    fontWeight = FontWeight.Black
+                    fontWeight = FontWeight.Black,
+                    textAlign = TextAlign.Center
                 )
                 Text(
                     text = "Entre pra jogar um STOP mais divertido ✨",
-                    color = Color.White.copy(alpha = 0.9f)
+                    color = Color.White.copy(alpha = 0.9f),
+                    textAlign = TextAlign.Center
                 )
 
                 Spacer(Modifier.height(14.dp))
@@ -552,7 +586,6 @@ fun HomeScreen(
 
                     Spacer(Modifier.height(14.dp))
 
-                    // Botões “tipo game”
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                         Button(
                             onClick = onOpenInstructions,
@@ -578,17 +611,21 @@ fun HomeScreen(
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun InstructionsScreen(onBack: () -> Unit) {
+fun InstructionsScreen(
+    onBack: () -> Unit,
+    onStartGame: () -> Unit
+) {
     val pages = listOf(
         "1) Preparação:\nColoque o celular no centro. Todos ao redor. Escolha uma categoria.",
-        "2) Turnos:\nO primeiro turno é de quem tocar primeiro. Depois passa para a direita.",
-        "3) Palavras:\nAntes de escolher a letra, diga uma palavra da categoria que comece com a letra.",
+        "2) Turnos:\nO primeiro turno é de quem digitou seu nome primeiro, e assim por diante.",
+        "3) Palavras:\nA palavra vai aparecer aleatoriamente.",
         "4) Erros:\nSe não conseguir dizer uma palavra válida ou repetir uma já dita, perde e é eliminado.",
         "5) Consenso:\nSe alguém discordar, pause e votem. Quem perder a votação é eliminado.",
         "6) Vencedor:\nEliminados saem até restar 1. O último é o campeão!"
     )
 
     var index by rememberSaveable { mutableIntStateOf(0) }
+    val isLast = index == pages.lastIndex
 
     Scaffold(
         containerColor = Color.Transparent,
@@ -630,12 +667,16 @@ fun InstructionsScreen(onBack: () -> Unit) {
                         ) { Text("Anterior", fontWeight = FontWeight.Bold) }
 
                         Button(
-                            onClick = { if (index < pages.lastIndex) index++ },
-                            enabled = index < pages.lastIndex,
+                            onClick = {
+                                if (!isLast) index++
+                                else onStartGame()
+                            },
                             modifier = Modifier.weight(1f),
                             shape = RoundedCornerShape(16.dp),
-                            colors = ButtonDefaults.buttonColors(containerColor = FunPink)
-                        ) { Text("Próximo", fontWeight = FontWeight.Bold) }
+                            colors = ButtonDefaults.buttonColors(containerColor = if (isLast) FunGreen else FunPink)
+                        ) {
+                            Text(if (isLast) "Começar" else "Próximo", fontWeight = FontWeight.Bold)
+                        }
                     }
                 }
             }
@@ -740,7 +781,7 @@ fun SetupScreen(
     }
 }
 
-/* ----------------------------- JOGO (TIMER + VISUAL GAME) ----------------------------- */
+/* ----------------------------- JOGO (TIMER + LETRAS SEM REPETIR + HISTÓRICO) ----------------------------- */
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -802,22 +843,37 @@ fun GameScreen(
         updateAndCheckOver(newPlayers, state.currentIndex)
     }
 
+    // ✅ LETRA SEM REPETIR
     fun spinLetter() {
-        val letter = LettersPT.random(Random(System.currentTimeMillis()))
+        val remaining = LettersPT.filter { it !in state.usedLetters }
+        if (remaining.isEmpty()) {
+            error = "Acabaram as letras disponíveis (sem repetição)."
+            return
+        }
+
+        val letter = remaining.random(Random(System.currentTimeMillis()))
         letterColor = FunPalette.random()
-        onStateChange(state.copy(currentLetter = letter, lastWord = null))
+
+        onStateChange(
+            state.copy(
+                currentLetter = letter,
+                lastWord = null,
+                usedLetters = state.usedLetters + letter
+            )
+        )
         word = ""
         error = null
     }
 
     fun submitWord() {
         val letter = state.currentLetter
+        val player = currentPlayer ?: return
+
         if (letter == null) {
             error = "Gire a letra primeiro."
             return
         }
 
-        // tempo acabou
         if (timeLeft <= 0) {
             eliminateCurrent("tempo esgotado")
             return
@@ -825,7 +881,6 @@ fun GameScreen(
 
         val w = word.trim()
         if (w.isBlank()) {
-            // regra: se clicar confirmar sem palavra perde
             eliminateCurrent("não falou palavra")
             return
         }
@@ -842,12 +897,20 @@ fun GameScreen(
             return
         }
 
+        // ✅ palavra aceita -> entra no histórico e fica até o fim
         timerRunning = false
         val newUsed = state.usedWords + normalized
+        val newAccepted = state.acceptedWords + WordEntry(
+            playerName = player.name,
+            letter = letter,
+            word = w
+        )
+
         val nextIdx = nextActiveIndex(players, state.currentIndex) ?: state.currentIndex
         onStateChange(
             state.copy(
                 usedWords = newUsed,
+                acceptedWords = newAccepted,
                 lastWord = w,
                 currentIndex = nextIdx,
                 currentLetter = null
@@ -917,7 +980,6 @@ fun GameScreen(
                     subtitle = "Vivos: $aliveCount",
                     accent = accent
                 ) {
-                    // LETRA em “disco”
                     Row(
                         Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.spacedBy(12.dp),
@@ -1018,6 +1080,46 @@ fun GameScreen(
                         Column {
                             Spacer(Modifier.height(10.dp))
                             Text(error.orEmpty(), color = FunRed, fontWeight = FontWeight.Bold)
+                        }
+                    }
+                }
+
+                Spacer(Modifier.height(14.dp))
+
+                GameCard(
+                    title = "Palavras aceitas",
+                    subtitle = "Ficam aqui até o fim do jogo ✅",
+                    accent = FunPurple
+                ) {
+                    if (state.acceptedWords.isEmpty()) {
+                        Text(
+                            "Ainda não tem nenhuma palavra aceita.",
+                            color = Color(0xFF6B7280)
+                        )
+                    } else {
+                        state.acceptedWords.asReversed().forEach { entry ->
+                            Row(
+                                Modifier.fillMaxWidth(),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(
+                                    "(${entry.letter})",
+                                    fontWeight = FontWeight.Black,
+                                    color = FunPurple
+                                )
+                                Spacer(Modifier.width(8.dp))
+                                Text(
+                                    entry.word,
+                                    modifier = Modifier.weight(1f),
+                                    fontWeight = FontWeight.Bold
+                                )
+                                Text(
+                                    entry.playerName,
+                                    color = Color(0xFF6B7280),
+                                    fontWeight = FontWeight.SemiBold
+                                )
+                            }
+                            Spacer(Modifier.height(8.dp))
                         }
                     }
                 }
