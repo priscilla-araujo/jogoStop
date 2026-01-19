@@ -1,5 +1,7 @@
 package com.example.jogostop
 
+// ----------------------------- IMPORTS -----------------------------
+// Imports do Android / Compose / Material3 / Navigation / Coroutines
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -37,17 +39,30 @@ import com.example.jogostop.ui.theme.JogoStopTheme
 import kotlinx.coroutines.delay
 import kotlin.random.Random
 
+// ===================================================================
+// 1) MAIN ACTIVITY: PONTO DE ENTRADA DO APP
+// ===================================================================
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+
+        // enableEdgeToEdge: deixa a UI usar a área total da tela (inclui “edge”)
         enableEdgeToEdge()
+
+        // setContent: começa o Jetpack Compose (UI declarativa)
         setContent {
+            // Aplica o tema do app (cores, tipografia Material)
             JogoStopTheme {
+
+                // NavController: controla as trocas de tela (Navigation Compose)
                 val navController = rememberNavController()
+
+                // Surface: “base” de UI com cor de fundo
                 Surface(
                     modifier = Modifier.fillMaxSize(),
                     color = MaterialTheme.colorScheme.background
                 ) {
+                    // AppNav: onde definimos todas as telas e rotas
                     AppNav(navController)
                 }
             }
@@ -56,7 +71,7 @@ class MainActivity : ComponentActivity() {
 }
 
 /* --------------------------------- ROTAS --------------------------------- */
-
+// Rotas (strings) usadas no NavHost para navegar entre telas.
 private object Routes {
     const val Login = "login"
     const val Register = "register"
@@ -69,38 +84,55 @@ private object Routes {
 
 /* ----------------------------- MODELOS / LÓGICA ----------------------------- */
 
+// Lista de letras em PT (sem K/W/Y, por exemplo) para o “sorteio”
 private val LettersPT = listOf(
     "A","B","C","D","E","F","G","H","I","J","L","M","N","O","P","Q","R","S","T","U","V","X","Z"
 )
 
+// Modelo do jogador:
+// - name: nome do jogador
+// - eliminated: se foi eliminado (true/false)
 data class Player(val name: String, val eliminated: Boolean = false)
 
+// Registro do histórico de palavras aceitas:
+// Guarda quem jogou, a letra e a palavra.
 data class WordEntry(
     val playerName: String,
     val letter: String,
     val word: String
 )
 
+// Estado do jogo (GameState):
+// É o “coração” da partida, guardando tudo que o jogo precisa saber.
 data class GameState(
     val category: String = "Animais",
     val players: List<Player> = emptyList(),
+
+    // Índice do jogador atual (quem está jogando agora)
     val currentIndex: Int = 0,
+
+    // Letra sorteada do turno atual (null quando ainda não girou)
     val currentLetter: String? = null,
 
-    // palavras repetidas / validação
+    // Set de palavras já usadas (normalizadas em lowercase) -> não repetir palavra
     val usedWords: Set<String> = emptySet(),
 
-    // ✅ histórico de palavras aceitas (fica até acabar o jogo)
+    // Histórico de palavras aceitas (fica até o fim da partida)
     val acceptedWords: List<WordEntry> = emptyList(),
 
-    // ✅ letras já sorteadas (pra NÃO repetir)
+    // Set de letras já sorteadas -> evita repetir letra durante o jogo
     val usedLetters: Set<String> = emptySet(),
 
+    // Última palavra aceita (só para mostrar na UI)
     val lastWord: String? = null,
+
+    // Controle de final de jogo
     val isOver: Boolean = false,
     val winnerName: String? = null,
 )
 
+// Próximo jogador “vivo” (não eliminado), a partir de startFrom.
+// Faz loop circular na lista.
 private fun nextActiveIndex(players: List<Player>, startFrom: Int): Int? {
     if (players.isEmpty()) return null
     var idx = startFrom
@@ -108,18 +140,20 @@ private fun nextActiveIndex(players: List<Player>, startFrom: Int): Int? {
         idx = (idx + 1) % players.size
         if (!players[idx].eliminated) return idx
     }
-    return null
+    return null // se todo mundo estiver eliminado, não tem próximo
 }
 
+// Conta quantos jogadores ainda estão vivos
 private fun countAlive(players: List<Player>) = players.count { !it.eliminated }
 
+// Se restar 1 jogador vivo, retorna o nome dele (vencedor). Senão, null.
 private fun computeWinner(players: List<Player>): String? {
     val alive = players.filter { !it.eliminated }
     return if (alive.size == 1) alive.first().name else null
 }
 
 /* --------------------------------- CORES “DIVERTIDAS” --------------------------------- */
-
+// Paleta de cores usadas no estilo do app (visual)
 private val FunBlue = Color(0xFF00C6FF)
 private val FunCyan = Color(0xFF00FFD1)
 private val FunPink = Color(0xFFFF2E93)
@@ -128,8 +162,10 @@ private val FunPurple = Color(0xFF7C4DFF)
 private val FunGreen = Color(0xFF22C55E)
 private val FunRed = Color(0xFFFF3B30)
 
+// Lista para pegar cores aleatórias (ex: disco da letra)
 private val FunPalette = listOf(FunBlue, FunCyan, FunPink, FunOrange, FunPurple, FunGreen)
 
+// Cor por categoria (só para UI ficar “temática”)
 private fun categoryColor(category: String): Color = when (category) {
     "Animais" -> FunGreen
     "Países" -> FunBlue
@@ -143,22 +179,31 @@ private fun categoryColor(category: String): Color = when (category) {
 
 /* --------------------------------- NAV --------------------------------- */
 
+// AppNav: controla as telas do app (Navigation Compose).
+// Aqui definimos as rotas e o que cada rota mostra.
 @Composable
 fun AppNav(navController: NavHostController) {
 
+    // Categoria selecionada na Home
+    // rememberSaveable: sobrevive a recomposição e (em muitos casos) rotação.
     var selectedCategory by rememberSaveable { mutableStateOf("Animais") }
 
-    // ✅ não usar rememberSaveable com data class custom sem Saver
+    // Estado do jogo (GameState)
+    // ⚠️ Importante: NÃO usamos rememberSaveable aqui porque GameState é data class custom.
+    // Para usar rememberSaveable, precisaríamos de um Saver (salvar/restaurar manual).
     var gameState by remember { mutableStateOf(GameState(category = selectedCategory)) }
 
+    // NavHost: “mapa” de rotas
     NavHost(
         navController = navController,
         startDestination = Routes.Login
     ) {
 
+        // ------------------ TELA LOGIN ------------------
         composable(Routes.Login) {
             LoginScreen(
                 onLogin = { _, _ ->
+                    // Ao logar: navega para Home e remove Login da pilha (não volta no “voltar”)
                     navController.navigate(Routes.Home) {
                         popUpTo(Routes.Login) { inclusive = true }
                     }
@@ -167,25 +212,30 @@ fun AppNav(navController: NavHostController) {
             )
         }
 
+        // ------------------ TELA CADASTRO ------------------
         composable(Routes.Register) {
             RegisterScreen(
+                // Cadastro aqui é “mock” (não grava em DB). Só volta.
                 onRegister = { _, _, _ -> navController.popBackStack() },
                 onBackToLogin = { navController.popBackStack() }
             )
         }
 
+        // ------------------ HOME (CATEGORIAS) ------------------
         composable(Routes.Home) {
             HomeScreen(
                 category = selectedCategory,
                 onCategoryChange = { selectedCategory = it },
                 onOpenInstructions = { navController.navigate(Routes.Instructions) },
                 onPlay = {
+                    // Ao jogar: reseta GameState e vai para Setup (jogadores)
                     gameState = GameState(category = selectedCategory)
                     navController.navigate(Routes.Setup)
                 }
             )
         }
 
+        // ------------------ INSTRUÇÕES ------------------
         composable(Routes.Instructions) {
             InstructionsScreen(
                 onBack = { navController.popBackStack() },
@@ -193,13 +243,19 @@ fun AppNav(navController: NavHostController) {
             )
         }
 
+        // ------------------ SETUP (JOGADORES) ------------------
         composable(Routes.Setup) {
             SetupScreen(
                 category = selectedCategory,
                 onBack = { navController.popBackStack() },
                 onStart = { names ->
+                    // Cria lista de jogadores a partir dos nomes
                     val players = names.filter { it.isNotBlank() }.map { Player(it.trim()) }
+
+                    // Inicializa GameState com jogadores + categoria
                     gameState = GameState(category = selectedCategory, players = players)
+
+                    // Vai para Game e remove Setup da pilha
                     navController.navigate(Routes.Game) {
                         popUpTo(Routes.Setup) { inclusive = true }
                     }
@@ -207,20 +263,25 @@ fun AppNav(navController: NavHostController) {
             )
         }
 
+        // ------------------ GAME (PARTIDA) ------------------
         composable(Routes.Game) {
             GameScreen(
                 state = gameState,
                 onStateChange = { gameState = it },
+                // Sair: volta para Home sem zerar a pilha inteira
                 onExit = { navController.popBackStack(Routes.Home, false) },
+                // Quando acabar: vai para tela GameOver
                 onGameOver = { navController.navigate(Routes.GameOver) }
             )
         }
 
+        // ------------------ GAME OVER ------------------
         composable(Routes.GameOver) {
             GameOverScreen(
                 winner = gameState.winnerName ?: "Vencedor",
                 category = gameState.category,
                 onRestart = {
+                    // Reinicia: zera estado e volta para Home
                     gameState = GameState(category = selectedCategory)
                     navController.popBackStack(Routes.Home, false)
                 }
@@ -231,6 +292,7 @@ fun AppNav(navController: NavHostController) {
 
 /* ----------------------------- UI: FUNDO / CARD ----------------------------- */
 
+// FunBackground: componente de fundo com gradiente (usado em todas as telas)
 @Composable
 private fun FunBackground(modifier: Modifier = Modifier, content: @Composable BoxScope.() -> Unit) {
     Box(
@@ -250,6 +312,7 @@ private fun FunBackground(modifier: Modifier = Modifier, content: @Composable Bo
     )
 }
 
+// GameCard: “card padrão” para organizar conteúdo das telas
 @Composable
 private fun GameCard(
     title: String,
@@ -266,6 +329,7 @@ private fun GameCard(
     ) {
         Column(Modifier.padding(18.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
+                // bolinha de cor (accent) para dar identidade visual
                 Box(
                     Modifier
                         .size(10.dp)
@@ -293,6 +357,7 @@ fun LoginScreen(
     onLogin: (email: String, senha: String) -> Unit,
     onGoToRegister: () -> Unit
 ) {
+    // Estados da tela (lembrados mesmo se recompor)
     var email by rememberSaveable { mutableStateOf("") }
     var senha by rememberSaveable { mutableStateOf("") }
     var erro by rememberSaveable { mutableStateOf<String?>(null) }
@@ -319,7 +384,7 @@ fun LoginScreen(
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
 
-                // ✅ LOGO CENTRALIZADO (logo.png -> R.drawable.logo)
+                // Logo do app (precisa existir em res/drawable/logo.png)
                 Spacer(Modifier.height(10.dp))
                 Image(
                     painter = painterResource(id = R.drawable.logo),
@@ -330,7 +395,7 @@ fun LoginScreen(
                 )
                 Spacer(Modifier.height(10.dp))
 
-                // ✅ “Bem-vindo” vem DEPOIS do logo
+                // Textos de boas-vindas
                 Text(
                     text = "Bem-vindo(a)!",
                     color = Color.White,
@@ -346,11 +411,13 @@ fun LoginScreen(
 
                 Spacer(Modifier.height(14.dp))
 
+                // Card do login
                 GameCard(
                     title = "Login",
                     subtitle = "Acesse sua conta para começar",
                     accent = FunCyan
                 ) {
+                    // Campo email (validação simples)
                     OutlinedTextField(
                         value = email,
                         onValueChange = { email = it; erro = null },
@@ -362,6 +429,7 @@ fun LoginScreen(
 
                     Spacer(Modifier.height(12.dp))
 
+                    // Campo senha (com visualTransformation para esconder caracteres)
                     OutlinedTextField(
                         value = senha,
                         onValueChange = { senha = it; erro = null },
@@ -372,6 +440,7 @@ fun LoginScreen(
                         modifier = Modifier.fillMaxWidth()
                     )
 
+                    // Mostra mensagem de erro apenas se erro != null
                     AnimatedVisibility(erro != null) {
                         Column {
                             Spacer(Modifier.height(10.dp))
@@ -381,6 +450,7 @@ fun LoginScreen(
 
                     Spacer(Modifier.height(16.dp))
 
+                    // Botão entrar: valida campos e chama onLogin
                     Button(
                         onClick = {
                             when {
@@ -398,6 +468,7 @@ fun LoginScreen(
 
                     Spacer(Modifier.height(8.dp))
 
+                    // Navega para tela de cadastro
                     TextButton(
                         onClick = onGoToRegister,
                         modifier = Modifier.align(Alignment.End)
@@ -416,6 +487,7 @@ fun RegisterScreen(
     onRegister: (nome: String, email: String, senha: String) -> Unit,
     onBackToLogin: () -> Unit
 ) {
+    // Estados do formulário de cadastro
     var nome by rememberSaveable { mutableStateOf("") }
     var email by rememberSaveable { mutableStateOf("") }
     var senha by rememberSaveable { mutableStateOf("") }
@@ -493,6 +565,7 @@ fun RegisterScreen(
                         modifier = Modifier.fillMaxWidth()
                     )
 
+                    // Erros de validação
                     AnimatedVisibility(erro != null) {
                         Column {
                             Spacer(Modifier.height(10.dp))
@@ -502,6 +575,7 @@ fun RegisterScreen(
 
                     Spacer(Modifier.height(16.dp))
 
+                    // Validações do cadastro
                     Button(
                         onClick = {
                             when {
@@ -534,7 +608,10 @@ fun HomeScreen(
     onOpenInstructions: () -> Unit,
     onPlay: () -> Unit
 ) {
+    // Categorias disponíveis
     val categories = listOf("Animais", "Países", "Comidas", "Profissões", "Filmes", "Marcas", "Esportes")
+
+    // Cor baseada na categoria
     val accent = categoryColor(category)
 
     Scaffold(
@@ -563,6 +640,7 @@ fun HomeScreen(
                     subtitle = "Depois é só chamar a galera e jogar!",
                     accent = accent
                 ) {
+                    // Dropdown de categorias (Material3)
                     var expanded by remember { mutableStateOf(false) }
 
                     ExposedDropdownMenuBox(expanded = expanded, onExpandedChange = { expanded = it }) {
@@ -586,6 +664,7 @@ fun HomeScreen(
 
                     Spacer(Modifier.height(14.dp))
 
+                    // Botões principais
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                         Button(
                             onClick = onOpenInstructions,
@@ -615,6 +694,7 @@ fun InstructionsScreen(
     onBack: () -> Unit,
     onStartGame: () -> Unit
 ) {
+    // Lista de “páginas” com instruções (cada item é uma página)
     val pages = listOf(
         "1) Preparação:\nColoque o celular no centro. Todos ao redor. Escolha uma categoria.",
         "2) Turnos:\nO primeiro turno é de quem digitou seu nome primeiro, e assim por diante.",
@@ -624,6 +704,7 @@ fun InstructionsScreen(
         "6) Vencedor:\nEliminados saem até restar 1. O último é o campeão!"
     )
 
+    // Índice da página atual
     var index by rememberSaveable { mutableIntStateOf(0) }
     val isLast = index == pages.lastIndex
 
@@ -657,6 +738,7 @@ fun InstructionsScreen(
 
                     Spacer(Modifier.height(16.dp))
 
+                    // Botões anterior / próximo
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                         Button(
                             onClick = { if (index > 0) index-- },
@@ -695,10 +777,16 @@ fun SetupScreen(
 ) {
     val accent = categoryColor(category)
 
+    // Quantidade de jogadores (mín 2, máx 10)
     var qtd by rememberSaveable { mutableIntStateOf(3) }
+
+    // Lista de nomes (tamanho acompanha qtd)
     var names by rememberSaveable { mutableStateOf(List(3) { "" }) }
+
+    // Mensagem de erro (validação)
     var erro by rememberSaveable { mutableStateOf<String?>(null) }
 
+    // syncList: ajusta a lista de nomes ao mudar qtd no Slider
     fun syncList(newQtd: Int) {
         qtd = newQtd.coerceIn(2, 10)
         names =
@@ -736,6 +824,8 @@ fun SetupScreen(
                     accent = accent
                 ) {
                     Text("Quantidade: $qtd", fontWeight = FontWeight.Black)
+
+                    // Slider controla qtd de jogadores
                     Slider(
                         value = qtd.toFloat(),
                         onValueChange = { syncList(it.toInt()) },
@@ -745,6 +835,7 @@ fun SetupScreen(
 
                     Spacer(Modifier.height(10.dp))
 
+                    // Cria campos de texto dinamicamente conforme qtd
                     names.forEachIndexed { i, v ->
                         OutlinedTextField(
                             value = v,
@@ -765,6 +856,7 @@ fun SetupScreen(
 
                     Spacer(Modifier.height(6.dp))
 
+                    // Começar: valida mínimo de 2 nomes preenchidos
                     Button(
                         onClick = {
                             val cleaned = names.map { it.trim() }.filter { it.isNotBlank() }
@@ -791,34 +883,45 @@ fun GameScreen(
     onExit: () -> Unit,
     onGameOver: () -> Unit
 ) {
+    // Texto digitado pelo jogador no turno atual
     var word by rememberSaveable { mutableStateOf("") }
+
+    // Mensagem de erro/eliminações
     var error by rememberSaveable { mutableStateOf<String?>(null) }
 
-    // ⏱️ timer de 20s
+    // ------------------ TIMER (20 segundos) ------------------
     var timeLeft by rememberSaveable { mutableIntStateOf(20) }
     var timerRunning by rememberSaveable { mutableStateOf(false) }
 
-    // consenso/votação
+    // ------------------ CONSENSO / VOTAÇÃO ------------------
     var showConsensus by rememberSaveable { mutableStateOf(false) }
     var voteYes by rememberSaveable { mutableIntStateOf(0) }
     var voteNo by rememberSaveable { mutableIntStateOf(0) }
 
+    // Atalhos para dados do estado atual
     val players = state.players
     val aliveCount = countAlive(players)
     val currentPlayer = players.getOrNull(state.currentIndex)
     val accent = categoryColor(state.category)
 
-    // cor do “disco” da letra
+    // Cor visual do “disco” da letra (só UI)
     var letterColor by remember { mutableStateOf(FunPink) }
 
+    // ===================================================================
+    // FUNÇÕES DO JOGO (ELIMINAR, GIRAR LETRA, CONFIRMAR PALAVRA, ETC.)
+    // ===================================================================
+
+    // Atualiza lista de jogadores e checa se o jogo terminou (sobrou 1 vivo)
     fun updateAndCheckOver(newPlayers: List<Player>, nextIndexFrom: Int) {
         val winner = computeWinner(newPlayers)
         if (winner != null) {
+            // Marca como finalizado e salva o vencedor
             onStateChange(state.copy(players = newPlayers, isOver = true, winnerName = winner))
             onGameOver()
             return
         }
 
+        // Se ainda não acabou: calcula próximo jogador vivo e reseta turno
         val nextIdx = nextActiveIndex(newPlayers, nextIndexFrom) ?: 0
         onStateChange(
             state.copy(
@@ -828,32 +931,48 @@ fun GameScreen(
                 lastWord = null
             )
         )
+
+        // Reseta estado local do turno
         timerRunning = false
         timeLeft = 20
         word = ""
         error = null
     }
 
+    // Elimina o jogador atual e passa para o próximo
     fun eliminateCurrent(reason: String) {
         timerRunning = false
+
         val newPlayers = players.mapIndexed { i, p ->
             if (i == state.currentIndex) p.copy(eliminated = true) else p
         }
+
+        // Mensagem explicando a eliminação (aparece na UI)
         error = "Eliminado: ${currentPlayer?.name ?: ""} ($reason)"
+
         updateAndCheckOver(newPlayers, state.currentIndex)
     }
 
-    // ✅ LETRA SEM REPETIR
+    // ------------------ GIRAR LETRA (SEM REPETIR) ------------------
     fun spinLetter() {
+        // Pega apenas as letras que ainda não foram usadas
         val remaining = LettersPT.filter { it !in state.usedLetters }
+
+        // Se acabou tudo, avisa
         if (remaining.isEmpty()) {
             error = "Acabaram as letras disponíveis (sem repetição)."
             return
         }
 
+        // Sorteia uma letra aleatória
         val letter = remaining.random(Random(System.currentTimeMillis()))
+
+        // Cor aleatória do disco (efeito visual)
         letterColor = FunPalette.random()
 
+        // Atualiza estado do jogo:
+        // - define currentLetter
+        // - adiciona a letra em usedLetters (para não repetir)
         onStateChange(
             state.copy(
                 currentLetter = letter,
@@ -861,86 +980,115 @@ fun GameScreen(
                 usedLetters = state.usedLetters + letter
             )
         )
+
+        // Limpa inputs do turno
         word = ""
         error = null
     }
 
+    // ------------------ CONFIRMAR PALAVRA ------------------
     fun submitWord() {
         val letter = state.currentLetter
         val player = currentPlayer ?: return
 
+        // Precisa ter letra sorteada
         if (letter == null) {
             error = "Gire a letra primeiro."
             return
         }
 
+        // Se tempo acabou, elimina
         if (timeLeft <= 0) {
             eliminateCurrent("tempo esgotado")
             return
         }
 
         val w = word.trim()
+
+        // Palavra vazia -> elimina
         if (w.isBlank()) {
             eliminateCurrent("não falou palavra")
             return
         }
 
+        // Checa se começa com a letra sorteada
         val first = w.first().uppercaseChar().toString()
         if (first != letter) {
             eliminateCurrent("não começou com '$letter'")
             return
         }
 
+        // Normaliza para impedir repetição (ex: “Foca” e “foca” = mesma)
         val normalized = w.lowercase()
         if (state.usedWords.contains(normalized)) {
             eliminateCurrent("repetiu palavra")
             return
         }
 
-        // ✅ palavra aceita -> entra no histórico e fica até o fim
+        // ✅ Se chegou aqui: palavra é ACEITA
         timerRunning = false
+
+        // Atualiza set de palavras usadas (para não repetir)
         val newUsed = state.usedWords + normalized
+
+        // Salva no histórico permanente (fica até acabar o jogo)
         val newAccepted = state.acceptedWords + WordEntry(
             playerName = player.name,
             letter = letter,
             word = w
         )
 
+        // Passa para o próximo jogador vivo
         val nextIdx = nextActiveIndex(players, state.currentIndex) ?: state.currentIndex
+
+        // Atualiza o estado global do jogo
         onStateChange(
             state.copy(
                 usedWords = newUsed,
                 acceptedWords = newAccepted,
                 lastWord = w,
                 currentIndex = nextIdx,
-                currentLetter = null
+                currentLetter = null // limpa letra para obrigar girar de novo
             )
         )
+
+        // Limpa input do turno
         word = ""
         error = null
     }
 
-    // ⏱️ começa quando a letra aparece
+    // ===================================================================
+    // TIMER AUTOMÁTICO COM LaunchedEffect
+    // - dispara quando currentLetter muda (quando gira letra)
+    // - também reage quando muda o jogador (currentIndex)
+    // ===================================================================
     LaunchedEffect(state.currentLetter, state.currentIndex) {
+        // Só roda timer se existe letra e o jogo não acabou
         if (state.currentLetter != null && !state.isOver) {
             timeLeft = 20
             timerRunning = true
 
+            // Loop: a cada 1s diminui 1 do tempo
             while (timerRunning && timeLeft > 0) {
                 delay(1000)
                 timeLeft--
             }
 
+            // Se chegou a 0 e ainda estava rodando, elimina por tempo
             if (timerRunning && timeLeft == 0) {
                 eliminateCurrent("tempo esgotado")
                 timerRunning = false
             }
         } else {
+            // Se não tem letra (ainda não girou), reseta timer
             timerRunning = false
             timeLeft = 20
         }
     }
 
+    // ===================================================================
+    // UI DA TELA DO JOGO
+    // ===================================================================
     Scaffold(
         containerColor = Color.Transparent,
         topBar = {
@@ -952,6 +1100,7 @@ fun GameScreen(
                     titleContentColor = Color.White
                 ),
                 actions = {
+                    // “Pausar” abre o modal de votação/consenso
                     AssistChip(
                         onClick = { showConsensus = true; voteYes = 0; voteNo = 0 },
                         label = { Text("Pausar") },
@@ -975,6 +1124,7 @@ fun GameScreen(
             ) {
                 Spacer(Modifier.height(6.dp))
 
+                // Card principal do turno
                 GameCard(
                     title = "Vez de: ${currentPlayer?.name ?: "-"}",
                     subtitle = "Vivos: $aliveCount",
@@ -985,6 +1135,7 @@ fun GameScreen(
                         horizontalArrangement = Arrangement.spacedBy(12.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
+                        // Caixa que mostra letra sorteada e timer
                         Box(
                             modifier = Modifier
                                 .weight(1f)
@@ -994,6 +1145,8 @@ fun GameScreen(
                             contentAlignment = Alignment.Center
                         ) {
                             Column(horizontalAlignment = Alignment.CenterHorizontally) {
+
+                                // Disco com borda colorida e letra no meio
                                 Box(
                                     modifier = Modifier
                                         .size(64.dp)
@@ -1011,6 +1164,7 @@ fun GameScreen(
 
                                 Spacer(Modifier.height(8.dp))
 
+                                // Cor do texto do timer muda quando está perto de acabar
                                 val timerTextColor =
                                     if (state.currentLetter == null) Color(0xFF6B7280)
                                     else if (timeLeft <= 5) FunRed
@@ -1024,6 +1178,7 @@ fun GameScreen(
                             }
                         }
 
+                        // Botão para girar a letra
                         Button(
                             onClick = { spinLetter() },
                             modifier = Modifier
@@ -1038,6 +1193,7 @@ fun GameScreen(
 
                     Spacer(Modifier.height(14.dp))
 
+                    // Campo para digitar palavra
                     OutlinedTextField(
                         value = word,
                         onValueChange = { word = it; error = null },
@@ -1049,7 +1205,10 @@ fun GameScreen(
 
                     Spacer(Modifier.height(12.dp))
 
+                    // Botões de ação do turno
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+
+                        // “Perdi” elimina manualmente (desistiu)
                         Button(
                             onClick = { eliminateCurrent("desistiu") },
                             modifier = Modifier.weight(1f),
@@ -1057,6 +1216,7 @@ fun GameScreen(
                             colors = ButtonDefaults.buttonColors(containerColor = FunOrange)
                         ) { Text("Perdi", fontWeight = FontWeight.Black) }
 
+                        // Confirmar valida e aceita/elimina
                         Button(
                             onClick = { submitWord() },
                             modifier = Modifier.weight(1f),
@@ -1065,6 +1225,7 @@ fun GameScreen(
                         ) { Text("Confirmar", fontWeight = FontWeight.Black) }
                     }
 
+                    // Mostra última palavra aceita
                     AnimatedVisibility(state.lastWord != null) {
                         Column {
                             Spacer(Modifier.height(12.dp))
@@ -1076,6 +1237,7 @@ fun GameScreen(
                         }
                     }
 
+                    // Mostra erros/eliminação
                     AnimatedVisibility(error != null) {
                         Column {
                             Spacer(Modifier.height(10.dp))
@@ -1086,6 +1248,7 @@ fun GameScreen(
 
                 Spacer(Modifier.height(14.dp))
 
+                // Card do histórico de palavras aceitas (permanece até o final)
                 GameCard(
                     title = "Palavras aceitas",
                     subtitle = "Ficam aqui até o fim do jogo ✅",
@@ -1097,6 +1260,7 @@ fun GameScreen(
                             color = Color(0xFF6B7280)
                         )
                     } else {
+                        // Mostra do mais recente para o mais antigo
                         state.acceptedWords.asReversed().forEach { entry ->
                             Row(
                                 Modifier.fillMaxWidth(),
@@ -1126,6 +1290,7 @@ fun GameScreen(
 
                 Spacer(Modifier.height(14.dp))
 
+                // Card de status dos jogadores (eliminado / no jogo)
                 GameCard(
                     title = "Jogadores",
                     subtitle = "Quem ainda tá no jogo?",
@@ -1144,6 +1309,10 @@ fun GameScreen(
             }
         }
 
+        // ===================================================================
+        // MODAL DE CONSENSO / VOTAÇÃO
+        // Usado quando alguém discorda da palavra (decidem se elimina ou mantém)
+        // ===================================================================
         if (showConsensus) {
             AlertDialog(
                 onDismissRequest = { showConsensus = false },
@@ -1177,9 +1346,12 @@ fun GameScreen(
                     Button(
                         onClick = {
                             showConsensus = false
+
+                            // Regra: se SIM > NÃO -> elimina
                             if (voteYes > voteNo) {
                                 eliminateCurrent("perdeu a votação")
                             } else {
+                                // Caso contrário, mantém e passa o turno
                                 timerRunning = false
                                 val nextIdx = nextActiveIndex(players, state.currentIndex) ?: state.currentIndex
                                 onStateChange(state.copy(currentIndex = nextIdx, currentLetter = null, lastWord = null))
@@ -1236,6 +1408,7 @@ fun GameOverScreen(
                     accent = accent,
                     modifier = Modifier.fillMaxWidth()
                 ) {
+                    // Mostra vencedor
                     Text(
                         "🏆 $winner",
                         style = MaterialTheme.typography.headlineLarge,
@@ -1246,6 +1419,7 @@ fun GameOverScreen(
 
                     Spacer(Modifier.height(16.dp))
 
+                    // Reiniciar: volta ao início (Home) via callback
                     Button(
                         onClick = onRestart,
                         shape = RoundedCornerShape(18.dp),
@@ -1261,7 +1435,7 @@ fun GameOverScreen(
 }
 
 /* ----------------------------- PREVIEW ----------------------------- */
-
+// Preview para testar a tela no Android Studio sem rodar o app
 @Preview(showBackground = true)
 @Composable
 fun PreviewLogin() {

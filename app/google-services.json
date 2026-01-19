@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "662506236916",
+    "project_id": "jogostop-91e5f",
+    "storage_bucket": "jogostop-91e5f.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:662506236916:android:46643c44b5dbdaac5e67a1",
+        "android_client_info": {
+          "package_name": "com.example.jogostop"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAyrLVYWRKLgCa5S0UsqD66BbRufjgm1sQ"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
