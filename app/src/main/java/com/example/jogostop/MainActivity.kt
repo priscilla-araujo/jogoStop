@@ -1,7 +1,6 @@
 package com.example.jogostop
 
 // ----------------------------- IMPORTS -----------------------------
-// Imports do Android / Compose / Material3 / Navigation / Coroutines
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -36,15 +35,15 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import com.example.jogostop.ui.theme.JogoStopTheme
+import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.auth.FirebaseAuthInvalidCredentialsException
 import com.google.firebase.auth.FirebaseAuthInvalidUserException
 import com.google.firebase.auth.FirebaseAuthUserCollisionException
 import com.google.firebase.auth.FirebaseAuthWeakPasswordException
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
-import kotlin.random.Random
 import kotlinx.coroutines.tasks.await
-
+import kotlin.random.Random
 
 // ===================================================================
 // 1) MAIN ACTIVITY: PONTO DE ENTRADA DO APP
@@ -53,23 +52,15 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        // enableEdgeToEdge: deixa a UI usar a área total da tela (inclui “edge”)
         enableEdgeToEdge()
 
-        // setContent: começa o Jetpack Compose (UI declarativa)
         setContent {
-            // Aplica o tema do app (cores, tipografia Material)
             JogoStopTheme {
-
-                // NavController: controla as trocas de tela (Navigation Compose)
                 val navController = rememberNavController()
-
-                // Surface: “base” de UI com cor de fundo
                 Surface(
                     modifier = Modifier.fillMaxSize(),
                     color = MaterialTheme.colorScheme.background
                 ) {
-                    // AppNav: onde definimos todas as telas e rotas
                     AppNav(navController)
                 }
             }
@@ -78,7 +69,6 @@ class MainActivity : ComponentActivity() {
 }
 
 /* --------------------------------- ROTAS --------------------------------- */
-// Rotas (strings) usadas no NavHost para navegar entre telas.
 private object Routes {
     const val Login = "login"
     const val Register = "register"
@@ -91,55 +81,31 @@ private object Routes {
 
 /* ----------------------------- MODELOS / LÓGICA ----------------------------- */
 
-// Lista de letras em PT (sem K/W/Y, por exemplo) para o “sorteio”
 private val LettersPT = listOf(
     "A","B","C","D","E","F","G","H","I","J","L","M","N","O","P","Q","R","S","T","U","V","X","Z"
 )
 
-// Modelo do jogador:
-// - name: nome do jogador
-// - eliminated: se foi eliminado (true/false)
 data class Player(val name: String, val eliminated: Boolean = false)
 
-// Registro do histórico de palavras aceitas:
-// Guarda quem jogou, a letra e a palavra.
 data class WordEntry(
     val playerName: String,
     val letter: String,
     val word: String
 )
 
-// Estado do jogo (GameState):
-// É o “coração” da partida, guardando tudo que o jogo precisa saber.
 data class GameState(
     val category: String = "Animais",
     val players: List<Player> = emptyList(),
-
-    // Índice do jogador atual (quem está jogando agora)
     val currentIndex: Int = 0,
-
-    // Letra sorteada do turno atual (null quando ainda não girou)
     val currentLetter: String? = null,
-
-    // Set de palavras já usadas (normalizadas em lowercase) -> não repetir palavra
     val usedWords: Set<String> = emptySet(),
-
-    // Histórico de palavras aceitas (fica até o fim da partida)
     val acceptedWords: List<WordEntry> = emptyList(),
-
-    // Set de letras já sorteadas -> evita repetir letra durante o jogo
     val usedLetters: Set<String> = emptySet(),
-
-    // Última palavra aceita (só para mostrar na UI)
     val lastWord: String? = null,
-
-    // Controle de final de jogo
     val isOver: Boolean = false,
     val winnerName: String? = null,
 )
 
-// Próximo jogador “vivo” (não eliminado), a partir de startFrom.
-// Faz loop circular na lista.
 private fun nextActiveIndex(players: List<Player>, startFrom: Int): Int? {
     if (players.isEmpty()) return null
     var idx = startFrom
@@ -147,20 +113,17 @@ private fun nextActiveIndex(players: List<Player>, startFrom: Int): Int? {
         idx = (idx + 1) % players.size
         if (!players[idx].eliminated) return idx
     }
-    return null // se todo mundo estiver eliminado, não tem próximo
+    return null
 }
 
-// Conta quantos jogadores ainda estão vivos
 private fun countAlive(players: List<Player>) = players.count { !it.eliminated }
 
-// Se restar 1 jogador vivo, retorna o nome dele (vencedor). Senão, null.
 private fun computeWinner(players: List<Player>): String? {
     val alive = players.filter { !it.eliminated }
     return if (alive.size == 1) alive.first().name else null
 }
 
 /* --------------------------------- CORES “DIVERTIDAS” --------------------------------- */
-// Paleta de cores usadas no estilo do app (visual)
 private val FunBlue = Color(0xFF00C6FF)
 private val FunCyan = Color(0xFF00FFD1)
 private val FunPink = Color(0xFFFF2E93)
@@ -169,10 +132,8 @@ private val FunPurple = Color(0xFF7C4DFF)
 private val FunGreen = Color(0xFF22C55E)
 private val FunRed = Color(0xFFFF3B30)
 
-// Lista para pegar cores aleatórias (ex: disco da letra)
 private val FunPalette = listOf(FunBlue, FunCyan, FunPink, FunOrange, FunPurple, FunGreen)
 
-// Cor por categoria (só para UI ficar “temática”)
 private fun categoryColor(category: String): Color = when (category) {
     "Animais" -> FunGreen
     "Países" -> FunBlue
@@ -184,50 +145,30 @@ private fun categoryColor(category: String): Color = when (category) {
     else -> FunBlue
 }
 
-/* ----------------------------- AUTH (FIREBASE) ----------------------------- */
-/*
-    Este repositório centraliza as chamadas do FirebaseAuth.
-
-    ✅ Login só funciona se o usuário já existir (regra natural do Firebase).
-    - Se o e-mail não estiver cadastrado -> FirebaseAuthInvalidUserException
-    - Se a senha estiver errada -> FirebaseAuthInvalidCredentialsException
-
-    ✅ Cadastro cria o usuário no Firebase.
-    - Se já existir -> FirebaseAuthUserCollisionException
-*/
-
 /* --------------------------------- NAV --------------------------------- */
-
-// AppNav: controla as telas do app (Navigation Compose).
-// Aqui definimos as rotas e o que cada rota mostra.
 @Composable
 fun AppNav(navController: NavHostController) {
 
-    // Repo do FirebaseAuth
     val authRepo = remember { AuthRepository() }
 
-    // Se já estiver logado, começa na Home; senão, começa no Login
-    val startDestination = if (authRepo.isLogged()) Routes.Home else Routes.Login
+    // ✅ FORÇA começar sempre pelo LOGIN
+    // depois, se estiver logado, redireciona automaticamente
+    val startDestination = Routes.Login
 
-    // Categoria selecionada na Home
-    // rememberSaveable: sobrevive a recomposição e (em muitos casos) rotação.
     var selectedCategory by rememberSaveable { mutableStateOf("Animais") }
-
-    // Estado do jogo (GameState)
     var gameState by remember { mutableStateOf(GameState(category = selectedCategory)) }
 
-    // NavHost: “mapa” de rotas
+    
+
     NavHost(
         navController = navController,
         startDestination = startDestination
     ) {
 
-        // ------------------ TELA LOGIN ------------------
         composable(Routes.Login) {
             LoginScreen(
                 authRepo = authRepo,
                 onLoginSuccess = {
-                    // Ao logar: navega para Home e remove Login da pilha (não volta no “voltar”)
                     navController.navigate(Routes.Home) {
                         popUpTo(Routes.Login) { inclusive = true }
                     }
@@ -236,33 +177,51 @@ fun AppNav(navController: NavHostController) {
             )
         }
 
-        // ------------------ TELA CADASTRO ------------------
         composable(Routes.Register) {
             RegisterScreen(
                 authRepo = authRepo,
                 onRegisterSuccess = {
-                    // Após cadastrar, volta para Login (ou poderia ir direto para Home)
+                    // depois de cadastrar, você pode:
+                    // 1) voltar pro login:
                     navController.popBackStack()
+                    // ou 2) ir direto pra home (se quiser):
+                    // navController.navigate(Routes.Home) {
+                    //     popUpTo(Routes.Login) { inclusive = true }
+                    // }
                 },
                 onBackToLogin = { navController.popBackStack() }
             )
         }
 
-        // ------------------ HOME (CATEGORIAS) ------------------
         composable(Routes.Home) {
             HomeScreen(
                 category = selectedCategory,
                 onCategoryChange = { selectedCategory = it },
-                onOpenInstructions = { navController.navigate(Routes.Instructions) },
+
+                onOpenInstructions = {
+                    navController.navigate(Routes.Instructions)
+                },
+
                 onPlay = {
-                    // Ao jogar: reseta GameState e vai para Setup (jogadores)
                     gameState = GameState(category = selectedCategory)
                     navController.navigate(Routes.Setup)
+                },
+
+                onLogout = {
+
+                    // 🔥 Firebase logout
+                    authRepo.logout()
+
+                    // 🔁 Volta para Login limpando pilha
+                    navController.navigate(Routes.Login) {
+                        popUpTo(Routes.Home) { inclusive = true }
+                    }
+
                 }
             )
         }
 
-        // ------------------ INSTRUÇÕES ------------------
+
         composable(Routes.Instructions) {
             InstructionsScreen(
                 onBack = { navController.popBackStack() },
@@ -270,19 +229,13 @@ fun AppNav(navController: NavHostController) {
             )
         }
 
-        // ------------------ SETUP (JOGADORES) ------------------
         composable(Routes.Setup) {
             SetupScreen(
                 category = selectedCategory,
                 onBack = { navController.popBackStack() },
                 onStart = { names ->
-                    // Cria lista de jogadores a partir dos nomes
                     val players = names.filter { it.isNotBlank() }.map { Player(it.trim()) }
-
-                    // Inicializa GameState com jogadores + categoria
                     gameState = GameState(category = selectedCategory, players = players)
-
-                    // Vai para Game e remove Setup da pilha
                     navController.navigate(Routes.Game) {
                         popUpTo(Routes.Setup) { inclusive = true }
                     }
@@ -290,25 +243,20 @@ fun AppNav(navController: NavHostController) {
             )
         }
 
-        // ------------------ GAME (PARTIDA) ------------------
         composable(Routes.Game) {
             GameScreen(
                 state = gameState,
                 onStateChange = { newState -> gameState = newState },
-                // Sair: volta para Home sem zerar a pilha inteira
                 onExit = { navController.popBackStack(Routes.Home, false) },
-                // Quando acabar: vai para tela GameOver
                 onGameOver = { navController.navigate(Routes.GameOver) }
             )
         }
 
-        // ------------------ GAME OVER ------------------
         composable(Routes.GameOver) {
             GameOverScreen(
                 winner = gameState.winnerName ?: "Vencedor",
                 category = gameState.category,
                 onRestart = {
-                    // Reinicia: zera estado e volta para Home
                     gameState = GameState(category = selectedCategory)
                     navController.popBackStack(Routes.Home, false)
                 }
@@ -319,7 +267,6 @@ fun AppNav(navController: NavHostController) {
 
 /* ----------------------------- UI: FUNDO / CARD ----------------------------- */
 
-// FunBackground: componente de fundo com gradiente (usado em todas as telas)
 @Composable
 private fun FunBackground(modifier: Modifier = Modifier, content: @Composable BoxScope.() -> Unit) {
     Box(
@@ -339,7 +286,6 @@ private fun FunBackground(modifier: Modifier = Modifier, content: @Composable Bo
     )
 }
 
-// GameCard: “card padrão” para organizar conteúdo das telas
 @Composable
 private fun GameCard(
     title: String,
@@ -356,7 +302,6 @@ private fun GameCard(
     ) {
         Column(Modifier.padding(18.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                // bolinha de cor (accent) para dar identidade visual
                 Box(
                     Modifier
                         .size(10.dp)
@@ -387,7 +332,6 @@ fun LoginScreen(
 ) {
     val scope = rememberCoroutineScope()
 
-    // Estados da tela
     var email by rememberSaveable { mutableStateOf("") }
     var senha by rememberSaveable { mutableStateOf("") }
     var erro by rememberSaveable { mutableStateOf<String?>(null) }
@@ -404,6 +348,8 @@ fun LoginScreen(
                 )
             )
         }
+
+
     ) { padding ->
         FunBackground(Modifier.padding(padding)) {
             Column(
@@ -414,9 +360,9 @@ fun LoginScreen(
                     .imePadding(),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
-
-                // Logo do app (precisa existir em res/drawable/logo.png)
                 Spacer(Modifier.height(10.dp))
+
+                // Se não tiver logo, comente este Image pra não dar crash.
                 Image(
                     painter = painterResource(id = R.drawable.logo),
                     contentDescription = "Logo JogoStop",
@@ -424,9 +370,9 @@ fun LoginScreen(
                         .size(200.dp)
                         .clip(RoundedCornerShape(24.dp))
                 )
+
                 Spacer(Modifier.height(10.dp))
 
-                // Textos de boas-vindas
                 Text(
                     text = "Bem-vindo(a)!",
                     color = Color.White,
@@ -442,7 +388,6 @@ fun LoginScreen(
 
                 Spacer(Modifier.height(14.dp))
 
-                // Card do login
                 GameCard(
                     title = "Login",
                     subtitle = "Acesse sua conta para começar",
@@ -471,7 +416,6 @@ fun LoginScreen(
                         enabled = !loading
                     )
 
-                    // Mostra erro
                     AnimatedVisibility(erro != null) {
                         Column {
                             Spacer(Modifier.height(10.dp))
@@ -538,7 +482,7 @@ fun RegisterScreen(
 ) {
     val scope = rememberCoroutineScope()
 
-    var nome by rememberSaveable { mutableStateOf("") } // (nome não é usado no Firebase Auth, mas mantemos na UI)
+    var nome by rememberSaveable { mutableStateOf("") }
     var email by rememberSaveable { mutableStateOf("") }
     var senha by rememberSaveable { mutableStateOf("") }
     var confirmar by rememberSaveable { mutableStateOf("") }
@@ -683,12 +627,11 @@ fun HomeScreen(
     category: String,
     onCategoryChange: (String) -> Unit,
     onOpenInstructions: () -> Unit,
-    onPlay: () -> Unit
-) {
-    // Categorias disponíveis
+    onPlay: () -> Unit,
+    onLogout: () -> Unit
+)
+{
     val categories = listOf("Animais", "Países", "Comidas", "Profissões", "Filmes", "Marcas", "Esportes")
-
-    // Cor baseada na categoria
     val accent = categoryColor(category)
 
     Scaffold(
@@ -696,6 +639,17 @@ fun HomeScreen(
         topBar = {
             TopAppBar(
                 title = { Text("Categorias") },
+                actions = {
+
+                    TextButton(onClick = onLogout) {
+                        Text(
+                            text = "Sair",
+                            color = Color.White,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+
+                },
                 colors = TopAppBarDefaults.topAppBarColors(
                     containerColor = Color.Transparent,
                     titleContentColor = Color.White
@@ -717,7 +671,6 @@ fun HomeScreen(
                     subtitle = "Depois é só chamar a galera e jogar!",
                     accent = accent
                 ) {
-                    // Dropdown de categorias (Material3)
                     var expanded by remember { mutableStateOf(false) }
 
                     ExposedDropdownMenuBox(expanded = expanded, onExpandedChange = { expanded = it }) {
@@ -741,7 +694,6 @@ fun HomeScreen(
 
                     Spacer(Modifier.height(14.dp))
 
-                    // Botões principais
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                         Button(
                             onClick = onOpenInstructions,
@@ -763,7 +715,7 @@ fun HomeScreen(
     }
 }
 
-/* ----------------------------- INSTRUÇÕES (PÁGINAS) ----------------------------- */
+/* ----------------------------- INSTRUÇÕES ----------------------------- */
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -823,16 +775,11 @@ fun InstructionsScreen(
                         ) { Text("Anterior", fontWeight = FontWeight.Bold) }
 
                         Button(
-                            onClick = {
-                                if (!isLast) index++
-                                else onStartGame()
-                            },
+                            onClick = { if (!isLast) index++ else onStartGame() },
                             modifier = Modifier.weight(1f),
                             shape = RoundedCornerShape(16.dp),
                             colors = ButtonDefaults.buttonColors(containerColor = if (isLast) FunGreen else FunPink)
-                        ) {
-                            Text(if (isLast) "Começar" else "Próximo", fontWeight = FontWeight.Bold)
-                        }
+                        ) { Text(if (isLast) "Começar" else "Próximo", fontWeight = FontWeight.Bold) }
                     }
                 }
             }
@@ -850,7 +797,6 @@ fun SetupScreen(
     onStart: (names: List<String>) -> Unit
 ) {
     val accent = categoryColor(category)
-
     var qtd by rememberSaveable { mutableIntStateOf(3) }
     var names by rememberSaveable { mutableStateOf(List(3) { "" }) }
     var erro by rememberSaveable { mutableStateOf<String?>(null) }
@@ -938,8 +884,7 @@ fun SetupScreen(
     }
 }
 
-/* ----------------------------- JOGO (TIMER + LETRAS SEM REPETIR + HISTÓRICO) ----------------------------- */
-// ✅ Mantido igual ao seu (não mexi na lógica do jogo)
+/* ----------------------------- GAME (COMPLETO) ----------------------------- */
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -949,9 +894,404 @@ fun GameScreen(
     onExit: () -> Unit,
     onGameOver: () -> Unit
 ) {
-    // ... (SEU GameScreen ORIGINAL CONTINUA AQUI SEM MUDANÇA)
-    // ⚠️ Para economizar espaço: cole aqui exatamente o seu GameScreen que você já tem,
-    // ele já está compatível com a assinatura correta.
+    var word by rememberSaveable { mutableStateOf("") }
+    var error by rememberSaveable { mutableStateOf<String?>(null) }
+
+    var timeLeft by rememberSaveable { mutableIntStateOf(20) }
+    var timerRunning by rememberSaveable { mutableStateOf(false) }
+
+    var showConsensus by rememberSaveable { mutableStateOf(false) }
+    var voteYes by rememberSaveable { mutableIntStateOf(0) }
+    var voteNo by rememberSaveable { mutableIntStateOf(0) }
+
+    val players = state.players
+    val aliveCount = countAlive(players)
+    val currentPlayer = players.getOrNull(state.currentIndex)
+    val accent = categoryColor(state.category)
+
+    var letterColor by remember { mutableStateOf(FunPink) }
+
+    fun updateAndCheckOver(newPlayers: List<Player>, nextIndexFrom: Int) {
+        val winner = computeWinner(newPlayers)
+        if (winner != null) {
+            onStateChange(state.copy(players = newPlayers, isOver = true, winnerName = winner))
+            onGameOver()
+            return
+        }
+
+        val nextIdx = nextActiveIndex(newPlayers, nextIndexFrom) ?: 0
+        onStateChange(
+            state.copy(
+                players = newPlayers,
+                currentIndex = nextIdx,
+                currentLetter = null,
+                lastWord = null
+            )
+        )
+
+        timerRunning = false
+        timeLeft = 20
+        word = ""
+        error = null
+    }
+
+    fun eliminateCurrent(reason: String) {
+        timerRunning = false
+
+        val newPlayers = players.mapIndexed { i, p ->
+            if (i == state.currentIndex) p.copy(eliminated = true) else p
+        }
+
+        error = "Eliminado: ${currentPlayer?.name ?: ""} ($reason)"
+        updateAndCheckOver(newPlayers, state.currentIndex)
+    }
+
+    fun spinLetter() {
+        val remaining = LettersPT.filter { it !in state.usedLetters }
+        if (remaining.isEmpty()) {
+            error = "Acabaram as letras disponíveis (sem repetição)."
+            return
+        }
+
+        val letter = remaining.random(Random(System.currentTimeMillis()))
+        letterColor = FunPalette.random()
+
+        onStateChange(
+            state.copy(
+                currentLetter = letter,
+                lastWord = null,
+                usedLetters = state.usedLetters + letter
+            )
+        )
+
+        word = ""
+        error = null
+    }
+
+    fun submitWord() {
+        val letter = state.currentLetter
+        val player = currentPlayer ?: return
+
+        if (letter == null) {
+            error = "Gire a letra primeiro."
+            return
+        }
+
+        if (timeLeft <= 0) {
+            eliminateCurrent("tempo esgotado")
+            return
+        }
+
+        val w = word.trim()
+        if (w.isBlank()) {
+            eliminateCurrent("não falou palavra")
+            return
+        }
+
+        val first = w.first().uppercaseChar().toString()
+        if (first != letter) {
+            eliminateCurrent("não começou com '$letter'")
+            return
+        }
+
+        val normalized = w.lowercase()
+        if (state.usedWords.contains(normalized)) {
+            eliminateCurrent("repetiu palavra")
+            return
+        }
+
+        timerRunning = false
+
+        val newUsed = state.usedWords + normalized
+        val newAccepted = state.acceptedWords + WordEntry(
+            playerName = player.name,
+            letter = letter,
+            word = w
+        )
+
+        val nextIdx = nextActiveIndex(players, state.currentIndex) ?: state.currentIndex
+
+        onStateChange(
+            state.copy(
+                usedWords = newUsed,
+                acceptedWords = newAccepted,
+                lastWord = w,
+                currentIndex = nextIdx,
+                currentLetter = null
+            )
+        )
+
+        word = ""
+        error = null
+    }
+
+    LaunchedEffect(state.currentLetter, state.currentIndex) {
+        if (state.currentLetter != null && !state.isOver) {
+            timeLeft = 20
+            timerRunning = true
+
+            while (timerRunning && timeLeft > 0) {
+                delay(1000)
+                timeLeft--
+            }
+
+            if (timerRunning && timeLeft == 0) {
+                eliminateCurrent("tempo esgotado")
+                timerRunning = false
+            }
+        } else {
+            timerRunning = false
+            timeLeft = 20
+        }
+    }
+
+    Scaffold(
+        containerColor = Color.Transparent,
+        topBar = {
+            TopAppBar(
+                title = { Text("STOP • ${state.category}") },
+                navigationIcon = { TextButton(onClick = onExit) { Text("Sair", color = Color.White) } },
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = Color.Transparent,
+                    titleContentColor = Color.White
+                ),
+                actions = {
+                    AssistChip(
+                        onClick = { showConsensus = true; voteYes = 0; voteNo = 0 },
+                        label = { Text("Pausar") },
+                        colors = AssistChipDefaults.assistChipColors(
+                            containerColor = Color.White.copy(alpha = 0.9f),
+                            labelColor = Color.Black
+                        )
+                    )
+                    Spacer(Modifier.width(8.dp))
+                }
+            )
+        }
+    ) { padding ->
+        FunBackground(Modifier.padding(padding)) {
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(horizontal = 20.dp, vertical = 12.dp)
+                    .verticalScroll(rememberScrollState())
+                    .imePadding()
+            ) {
+                Spacer(Modifier.height(6.dp))
+
+                GameCard(
+                    title = "Vez de: ${currentPlayer?.name ?: "-"}",
+                    subtitle = "Vivos: $aliveCount",
+                    accent = accent
+                ) {
+                    Row(
+                        Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .weight(1f)
+                                .height(110.dp)
+                                .clip(RoundedCornerShape(18.dp))
+                                .background(Color(0xFFF8FAFC)),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(64.dp)
+                                        .clip(CircleShape)
+                                        .background(Color.White)
+                                        .border(6.dp, letterColor, CircleShape),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Text(
+                                        text = state.currentLetter ?: "—",
+                                        fontWeight = FontWeight.Black,
+                                        style = MaterialTheme.typography.headlineLarge
+                                    )
+                                }
+
+                                Spacer(Modifier.height(8.dp))
+
+                                val timerTextColor =
+                                    if (state.currentLetter == null) Color(0xFF6B7280)
+                                    else if (timeLeft <= 5) FunRed
+                                    else FunBlue
+
+                                Text(
+                                    text = if (state.currentLetter == null) "⏱️ 20s" else "⏱️ ${timeLeft}s",
+                                    color = timerTextColor,
+                                    fontWeight = FontWeight.Bold
+                                )
+                            }
+                        }
+
+                        Button(
+                            onClick = { spinLetter() },
+                            modifier = Modifier
+                                .weight(1f)
+                                .height(110.dp),
+                            shape = RoundedCornerShape(18.dp),
+                            colors = ButtonDefaults.buttonColors(containerColor = FunPink)
+                        ) {
+                            Text("Girar\nLetra", textAlign = TextAlign.Center, fontWeight = FontWeight.Black)
+                        }
+                    }
+
+                    Spacer(Modifier.height(14.dp))
+
+                    OutlinedTextField(
+                        value = word,
+                        onValueChange = { word = it; error = null },
+                        label = { Text("Palavra da categoria") },
+                        placeholder = { Text("Ex: Foca") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+
+                    Spacer(Modifier.height(12.dp))
+
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                        Button(
+                            onClick = { eliminateCurrent("desistiu") },
+                            modifier = Modifier.weight(1f),
+                            shape = RoundedCornerShape(16.dp),
+                            colors = ButtonDefaults.buttonColors(containerColor = FunOrange)
+                        ) { Text("Perdi", fontWeight = FontWeight.Black) }
+
+                        Button(
+                            onClick = { submitWord() },
+                            modifier = Modifier.weight(1f),
+                            shape = RoundedCornerShape(16.dp),
+                            colors = ButtonDefaults.buttonColors(containerColor = FunGreen)
+                        ) { Text("Confirmar", fontWeight = FontWeight.Black) }
+                    }
+
+                    AnimatedVisibility(state.lastWord != null) {
+                        Column {
+                            Spacer(Modifier.height(12.dp))
+                            Text(
+                                "✅ Última aceita: ${state.lastWord}",
+                                color = Color(0xFF111827),
+                                fontWeight = FontWeight.SemiBold
+                            )
+                        }
+                    }
+
+                    AnimatedVisibility(error != null) {
+                        Column {
+                            Spacer(Modifier.height(10.dp))
+                            Text(error.orEmpty(), color = FunRed, fontWeight = FontWeight.Bold)
+                        }
+                    }
+                }
+
+                Spacer(Modifier.height(14.dp))
+
+                GameCard(
+                    title = "Palavras aceitas",
+                    subtitle = "Ficam aqui até o fim do jogo ✅",
+                    accent = FunPurple
+                ) {
+                    if (state.acceptedWords.isEmpty()) {
+                        Text("Ainda não tem nenhuma palavra aceita.", color = Color(0xFF6B7280))
+                    } else {
+                        state.acceptedWords.asReversed().forEach { entry ->
+                            Row(
+                                Modifier.fillMaxWidth(),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text("(${entry.letter})", fontWeight = FontWeight.Black, color = FunPurple)
+                                Spacer(Modifier.width(8.dp))
+                                Text(entry.word, modifier = Modifier.weight(1f), fontWeight = FontWeight.Bold)
+                                Text(entry.playerName, color = Color(0xFF6B7280), fontWeight = FontWeight.SemiBold)
+                            }
+                            Spacer(Modifier.height(8.dp))
+                        }
+                    }
+                }
+
+                Spacer(Modifier.height(14.dp))
+
+                GameCard(
+                    title = "Jogadores",
+                    subtitle = "Quem ainda tá no jogo?",
+                    accent = FunCyan
+                ) {
+                    players.forEach { p ->
+                        val status = if (p.eliminated) "Eliminado" else "No jogo"
+                        val color = if (p.eliminated) FunRed else FunGreen
+                        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                            Text(p.name, modifier = Modifier.weight(1f), fontWeight = FontWeight.Bold)
+                            Text(status, color = color, fontWeight = FontWeight.Bold)
+                        }
+                        Spacer(Modifier.height(8.dp))
+                    }
+                }
+            }
+        }
+
+        if (showConsensus) {
+            AlertDialog(
+                onDismissRequest = { showConsensus = false },
+                title = { Text("Consenso / Votação") },
+                text = {
+                    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                        Text(
+                            "Use quando alguém discordar da palavra.\n" +
+                                    "SIM = elimina o jogador atual.\n" +
+                                    "NÃO = mantém o jogador."
+                        )
+                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                            Button(
+                                onClick = { voteNo++ },
+                                modifier = Modifier.weight(1f),
+                                shape = RoundedCornerShape(14.dp),
+                                colors = ButtonDefaults.buttonColors(containerColor = FunBlue)
+                            ) {
+                                Text("NÃO ($voteNo)", fontWeight = FontWeight.Black)
+                            }
+
+
+                            Button(
+                                onClick = { voteYes++ },
+                                modifier = Modifier.weight(1f),
+                                shape = RoundedCornerShape(14.dp),
+                                colors = ButtonDefaults.buttonColors(containerColor = FunPink)
+                            ) {
+                                Text("SIM ($voteYes)", fontWeight = FontWeight.Black)
+                            }
+
+                        }
+                        Text("Finalize quando decidir.", color = Color(0xFF6B7280))
+                    }
+                },
+                confirmButton = {
+                    Button(
+                        onClick = {
+                            showConsensus = false
+                            if (voteYes > voteNo) {
+                                eliminateCurrent("perdeu a votação")
+                            } else {
+                                timerRunning = false
+                                val nextIdx = nextActiveIndex(players, state.currentIndex) ?: state.currentIndex
+                                onStateChange(state.copy(currentIndex = nextIdx, currentLetter = null, lastWord = null))
+                                word = ""
+                                error = "Votação: jogador mantido."
+                            }
+                        },
+                        shape = RoundedCornerShape(14.dp),
+                        colors = ButtonDefaults.buttonColors(containerColor = FunGreen)
+                    ) { Text("Finalizar", fontWeight = FontWeight.Black) }
+                },
+                dismissButton = {
+                    TextButton(onClick = { showConsensus = false }) { Text("Cancelar") }
+                }
+            )
+        }
+    }
 }
 
 /* ----------------------------- GAME OVER ----------------------------- */
@@ -1027,12 +1367,3 @@ fun PreviewLogin() {
         )
     }
 }
-
-
-
-
-
-
-
-
-
